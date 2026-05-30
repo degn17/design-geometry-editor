@@ -1,0 +1,298 @@
+import type { KonvaEventObject } from "konva/lib/Node";
+import { useMemo, useRef, useState, useEffect } from "react";
+import { Group, Layer, Rect, Stage } from "react-konva";
+import { useEditorStore } from "../store/editorStore";
+import type { DesignPoint, EditorTool } from "../types/editor";
+import { getDistance, normalizeRect, type PointLike, type RectLike } from "../utils/geometry";
+import { createId } from "../utils/ids";
+import CompareView from "./CompareView";
+import AnnotationLayer from "./canvas/AnnotationLayer";
+import BaseImageLayer from "./canvas/BaseImageLayer";
+
+function CanvasStage() {
+  const {
+    activeTool,
+    imageUrl,
+    imageWidth,
+    imageHeight,
+    points,
+    axes,
+    regions,
+    lockedRegions,
+    transformedImageUrl,
+    showCompare,
+    addPoint,
+    addAxis,
+    addRegion,
+    addLockedRegion,
+    setSelectedId,
+  } = useEditorStore((state) => ({
+    activeTool: state.activeTool,
+    imageUrl: state.imageUrl,
+    imageWidth: state.imageWidth,
+    imageHeight: state.imageHeight,
+    points: state.points,
+    axes: state.axes,
+    regions: state.regions,
+    lockedRegions: state.lockedRegions,
+    transformedImageUrl: state.transformedImageUrl,
+    showCompare: state.showCompare,
+    addPoint: state.addPoint,
+    addAxis: state.addAxis,
+    addRegion: state.addRegion,
+    addLockedRegion: state.addLockedRegion,
+    setSelectedId: state.setSelectedId,
+  }));
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
+  const [draftRect, setDraftRect] = useState<RectLike | null>(null);
+  const [dragStart, setDragStart] = useState<PointLike | null>(null);
+  const [pendingAxisStartId, setPendingAxisStartId] = useState<string | null>(null);
+  const displayImageUrl = showCompare && transformedImageUrl ? transformedImageUrl : imageUrl;
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(([entry]) => {
+      setStageSize({
+        width: Math.max(320, entry.contentRect.width),
+        height: Math.max(320, entry.contentRect.height),
+      });
+    });
+
+    resizeObserver.observe(element);
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  const viewport = useMemo(
+    () => getImageViewport(stageSize.width, stageSize.height, imageWidth, imageHeight),
+    [imageHeight, imageWidth, stageSize.height, stageSize.width]
+  );
+
+  return (
+    <section className="flex min-w-0 flex-col bg-neutral-900">
+      <div className="flex h-12 items-center justify-between border-b border-neutral-800 px-4">
+        <div>
+          <h1 className="text-sm font-semibold text-neutral-100">Design Geometry Editor</h1>
+          <p className="text-xs text-neutral-500">MVP v0.1 local prototype</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <CompareView />
+          <span className="text-xs text-neutral-500">
+            {imageUrl ? `${imageWidth} x ${imageHeight}px` : "No image loaded"}
+          </span>
+        </div>
+      </div>
+
+      <div ref={containerRef} className="relative flex-1 overflow-hidden bg-neutral-950">
+        {!displayImageUrl || imageWidth === 0 || imageHeight === 0 ? (
+          <div className="absolute inset-6 flex items-center justify-center rounded-md border border-dashed border-neutral-700 text-sm text-neutral-500">
+            Upload a side-view car image to start annotating.
+          </div>
+        ) : (
+          <Stage
+            width={stageSize.width}
+            height={stageSize.height}
+            onMouseDown={(event) => {
+              const imagePoint = getImagePoint(event, viewport, imageWidth, imageHeight);
+              if (!imagePoint) {
+                return;
+              }
+
+              if (activeTool === "point") {
+                addPoint({
+                  id: createId("point"),
+                  name: `Point ${points.length + 1}`,
+                  x: imagePoint.x,
+                  y: imagePoint.y,
+                  type: "generic",
+                });
+                return;
+              }
+
+              if (activeTool === "region" || activeTool === "lock") {
+                setDragStart(imagePoint);
+                setDraftRect({ x: imagePoint.x, y: imagePoint.y, width: 0, height: 0 });
+                return;
+              }
+
+              if (activeTool === "select") {
+                setSelectedId(null);
+              }
+            }}
+            onMouseMove={(event) => {
+              if (!dragStart || (activeTool !== "region" && activeTool !== "lock")) {
+                return;
+              }
+
+              const imagePoint = getImagePoint(event, viewport, imageWidth, imageHeight);
+              if (imagePoint) {
+                setDraftRect(normalizeRect(dragStart, imagePoint));
+              }
+            }}
+            onMouseUp={() => {
+              if (!draftRect || (activeTool !== "region" && activeTool !== "lock")) {
+                return;
+              }
+
+              if (draftRect.width >= 8 && draftRect.height >= 8) {
+                if (activeTool === "region") {
+                  addRegion({
+                    id: createId("region"),
+                    name: `Region ${regions.length + 1}`,
+                    x: draftRect.x,
+                    y: draftRect.y,
+                    width: draftRect.width,
+                    height: draftRect.height,
+                    type: "influence",
+                  });
+                } else {
+                  addLockedRegion({
+                    id: createId("lock"),
+                    name: `Lock ${lockedRegions.length + 1}`,
+                    x: draftRect.x,
+                    y: draftRect.y,
+                    width: draftRect.width,
+                    height: draftRect.height,
+                    type: "custom",
+                  });
+                }
+              }
+
+              setDraftRect(null);
+              setDragStart(null);
+            }}
+          >
+            <Layer>
+              <Group x={viewport.x} y={viewport.y} scaleX={viewport.scale} scaleY={viewport.scale}>
+                <BaseImageLayer imageUrl={displayImageUrl} width={imageWidth} height={imageHeight} />
+                <AnnotationLayer
+                  onPointClick={(point) =>
+                    handlePointClickForAxis(
+                      point,
+                      activeTool,
+                      pendingAxisStartId,
+                      points,
+                      axes.length,
+                      setPendingAxisStartId,
+                      addAxis
+                    )
+                  }
+                />
+                {draftRect ? (
+                  <Rect
+                    x={draftRect.x}
+                    y={draftRect.y}
+                    width={draftRect.width}
+                    height={draftRect.height}
+                    fill={
+                      activeTool === "lock"
+                        ? "rgba(249, 115, 22, 0.18)"
+                        : "rgba(14, 165, 233, 0.18)"
+                    }
+                    stroke={activeTool === "lock" ? "#fb923c" : "#38bdf8"}
+                    strokeWidth={2}
+                    dash={[8, 5]}
+                    listening={false}
+                  />
+                ) : null}
+              </Group>
+            </Layer>
+          </Stage>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function getImageViewport(
+  stageWidth: number,
+  stageHeight: number,
+  imageWidth: number,
+  imageHeight: number
+) {
+  if (imageWidth === 0 || imageHeight === 0) {
+    return { x: 0, y: 0, scale: 1 };
+  }
+
+  const scale = Math.min((stageWidth * 0.92) / imageWidth, (stageHeight * 0.9) / imageHeight);
+  const safeScale = Math.max(0.05, Math.min(scale, 2));
+
+  return {
+    x: (stageWidth - imageWidth * safeScale) / 2,
+    y: (stageHeight - imageHeight * safeScale) / 2,
+    scale: safeScale,
+  };
+}
+
+function getImagePoint(
+  event: KonvaEventObject<MouseEvent>,
+  viewport: { x: number; y: number; scale: number },
+  imageWidth: number,
+  imageHeight: number
+): PointLike | null {
+  const stage = event.target.getStage();
+  const pointer = stage?.getPointerPosition();
+
+  if (!pointer) {
+    return null;
+  }
+
+  const x = (pointer.x - viewport.x) / viewport.scale;
+  const y = (pointer.y - viewport.y) / viewport.scale;
+
+  if (x < 0 || y < 0 || x > imageWidth || y > imageHeight) {
+    return null;
+  }
+
+  return {
+    x: Math.max(0, Math.min(imageWidth, x)),
+    y: Math.max(0, Math.min(imageHeight, y)),
+  };
+}
+
+function handlePointClickForAxis(
+  point: DesignPoint,
+  activeTool: EditorTool,
+  pendingAxisStartId: string | null,
+  points: DesignPoint[],
+  axisCount: number,
+  setPendingAxisStartId: (id: string | null) => void,
+  addAxis: ReturnType<typeof useEditorStore.getState>["addAxis"]
+) {
+  if (activeTool !== "axis") {
+    return;
+  }
+
+  if (!pendingAxisStartId) {
+    setPendingAxisStartId(point.id);
+    return;
+  }
+
+  if (pendingAxisStartId === point.id) {
+    setPendingAxisStartId(null);
+    return;
+  }
+
+  const startPoint = points.find((candidate) => candidate.id === pendingAxisStartId);
+  if (!startPoint) {
+    setPendingAxisStartId(point.id);
+    return;
+  }
+
+  addAxis({
+    id: createId("axis"),
+    name: `Axis ${axisCount + 1}`,
+    startPointId: startPoint.id,
+    endPointId: point.id,
+    currentLength: getDistance(startPoint, point),
+    direction: "horizontal",
+    anchorMode: "startFixed",
+  });
+  setPendingAxisStartId(null);
+}
+
+export default CanvasStage;
