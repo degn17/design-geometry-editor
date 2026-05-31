@@ -7,13 +7,14 @@ interface RegionLayerProps {
   regions: DesignRegion[];
   selectedId: string | null;
   onSelect(id: string): void;
+  onMove(id: string, x: number, y: number): void;
   onResize(id: string, width: number, height: number): void;
 }
 
 const MIN_REGION_SIZE = 10;
 const HANDLE_SIZE = 10;
 
-function RegionLayer({ regions, selectedId, onSelect, onResize }: RegionLayerProps) {
+function RegionLayer({ regions, selectedId, onSelect, onMove, onResize }: RegionLayerProps) {
   return (
     <>
       {regions.map((region) => {
@@ -30,9 +31,13 @@ function RegionLayer({ regions, selectedId, onSelect, onResize }: RegionLayerPro
               stroke={isSelected ? "#f8fafc" : "#38bdf8"}
               strokeWidth={isSelected ? 3 : 2}
               dash={[8, 5]}
+              draggable
               onMouseDown={(event) => {
                 event.cancelBubble = true;
               }}
+              onDragStart={() => onSelect(region.id)}
+              onDragMove={(event) => onMove(region.id, event.target.x(), event.target.y())}
+              onDragEnd={(event) => onMove(region.id, event.target.x(), event.target.y())}
               onClick={(event) => handleSelect(event, region.id, onSelect)}
               onTap={(event) => handleSelect(event, region.id, onSelect)}
             />

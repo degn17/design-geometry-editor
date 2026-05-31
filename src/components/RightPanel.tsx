@@ -14,6 +14,7 @@ function RightPanel() {
     lockedRegions,
     selectedId,
     transformedImageUrl,
+    setSelectedId,
     updateAxis,
     deletePoint,
     deleteAxis,
@@ -30,6 +31,7 @@ function RightPanel() {
     lockedRegions: state.lockedRegions,
     selectedId: state.selectedId,
     transformedImageUrl: state.transformedImageUrl,
+    setSelectedId: state.setSelectedId,
     updateAxis: state.updateAxis,
     deletePoint: state.deletePoint,
     deleteAxis: state.deleteAxis,
@@ -51,6 +53,26 @@ function RightPanel() {
       setSelectedRegionId(regions[0].id);
     }
   }, [regions, selectedRegionId]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!selectedObject || !isDeleteKey(event) || isEditableTarget(event.target)) {
+        return;
+      }
+
+      event.preventDefault();
+      deleteSelectedObject(selectedObject, {
+        deletePoint,
+        deleteAxis,
+        deleteRegion,
+        deleteLockedRegion,
+      });
+      setMessage("Selected object deleted.");
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [deleteAxis, deleteLockedRegion, deletePoint, deleteRegion, selectedObject]);
 
   const validationMessage =
     selectedObject?.kind === "axis"
@@ -160,6 +182,15 @@ function RightPanel() {
         ) : null}
         {message ? <p className="mt-3 text-xs text-emerald-300">{message}</p> : null}
       </section>
+
+      <ObjectList
+        points={points}
+        axes={axes}
+        regions={regions}
+        lockedRegions={lockedRegions}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+      />
     </aside>
   );
 }
@@ -369,6 +400,103 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ObjectList({
+  points,
+  axes,
+  regions,
+  lockedRegions,
+  selectedId,
+  onSelect,
+}: {
+  points: DesignPoint[];
+  axes: DesignAxis[];
+  regions: DesignRegion[];
+  lockedRegions: LockedRegion[];
+  selectedId: string | null;
+  onSelect(id: string): void;
+}) {
+  return (
+    <section className="mt-4 space-y-4 rounded-md border border-neutral-800 bg-neutral-900 p-3">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+        Object List
+      </h3>
+      <ObjectGroup
+        title="Points"
+        objects={points.map((point) => ({ id: point.id, name: point.name, type: point.type }))}
+        selectedId={selectedId}
+        onSelect={onSelect}
+      />
+      <ObjectGroup
+        title="Axes"
+        objects={axes.map((axis) => ({ id: axis.id, name: axis.name, type: axis.direction }))}
+        selectedId={selectedId}
+        onSelect={onSelect}
+      />
+      <ObjectGroup
+        title="Regions"
+        objects={regions.map((region) => ({ id: region.id, name: region.name, type: region.type }))}
+        selectedId={selectedId}
+        onSelect={onSelect}
+      />
+      <ObjectGroup
+        title="Locked Regions"
+        objects={lockedRegions.map((region) => ({
+          id: region.id,
+          name: region.name,
+          type: region.type,
+        }))}
+        selectedId={selectedId}
+        onSelect={onSelect}
+      />
+    </section>
+  );
+}
+
+function ObjectGroup({
+  title,
+  objects,
+  selectedId,
+  onSelect,
+}: {
+  title: string;
+  objects: Array<{ id: string; name: string; type: string }>;
+  selectedId: string | null;
+  onSelect(id: string): void;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between text-xs">
+        <span className="font-semibold text-neutral-300">{title}</span>
+        <span className="text-neutral-500">{objects.length}</span>
+      </div>
+      {objects.length === 0 ? (
+        <p className="rounded-md bg-neutral-950 px-3 py-2 text-xs text-neutral-500">None</p>
+      ) : (
+        <div className="space-y-1">
+          {objects.map((object) => {
+            const isSelected = selectedId === object.id;
+            return (
+              <button
+                key={object.id}
+                type="button"
+                className={`w-full rounded-md border px-3 py-2 text-left transition ${
+                  isSelected
+                    ? "border-sky-400 bg-sky-500/15 text-sky-100"
+                    : "border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-neutral-600"
+                }`}
+                onClick={() => onSelect(object.id)}
+              >
+                <span className="block truncate text-sm font-medium">{object.name}</span>
+                <span className="block truncate text-xs text-neutral-500">{object.type}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function findSelectedObject(
   selectedId: string | null,
   points: DesignPoint[],
@@ -430,6 +558,24 @@ function deleteSelectedObject(
   }
 
   actions.deleteLockedRegion(selectedObject.value.id);
+}
+
+function isDeleteKey(event: KeyboardEvent) {
+  return event.key === "Delete" || event.key === "Backspace";
+}
+
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+  return (
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    target.isContentEditable
+  );
 }
 
 function getTransformValidationMessage({

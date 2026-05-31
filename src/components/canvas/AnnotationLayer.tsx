@@ -38,12 +38,14 @@ function AnnotationLayer({ onPointClick }: AnnotationLayerProps) {
         regions={regions}
         selectedId={selectedId}
         onSelect={setSelectedId}
+        onMove={(id, x, y) => updateRegion(id, { x, y })}
         onResize={(id, width, height) => updateRegion(id, { width, height })}
       />
       <LockLayer
         lockedRegions={lockedRegions}
         selectedId={selectedId}
         onSelect={setSelectedId}
+        onMove={(id, x, y) => updateLockedRegion(id, { x, y })}
         onResize={(id, width, height) => updateLockedRegion(id, { width, height })}
       />
       <AxisLayer axes={axes} points={points} selectedId={selectedId} onSelect={setSelectedId} />

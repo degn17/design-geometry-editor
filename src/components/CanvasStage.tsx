@@ -21,6 +21,7 @@ function CanvasStage() {
     lockedRegions,
     transformedImageUrl,
     showCompare,
+    setShowCompare,
     addPoint,
     addAxis,
     addRegion,
@@ -37,6 +38,7 @@ function CanvasStage() {
     lockedRegions: state.lockedRegions,
     transformedImageUrl: state.transformedImageUrl,
     showCompare: state.showCompare,
+    setShowCompare: state.setShowCompare,
     addPoint: state.addPoint,
     addAxis: state.addAxis,
     addRegion: state.addRegion,
@@ -49,7 +51,10 @@ function CanvasStage() {
   const [dragStart, setDragStart] = useState<PointLike | null>(null);
   const [pendingAxisStartId, setPendingAxisStartId] = useState<string | null>(null);
   const [axisMessage, setAxisMessage] = useState<string | null>(null);
+  const [beforeAfterPercent, setBeforeAfterPercent] = useState(100);
   const displayImageUrl = showCompare && transformedImageUrl ? transformedImageUrl : imageUrl;
+  const showBeforeAfter =
+    Boolean(imageUrl && transformedImageUrl && showCompare) && beforeAfterPercent < 100;
 
   useEffect(() => {
     const element = containerRef.current;
@@ -191,7 +196,38 @@ function CanvasStage() {
           >
             <Layer>
               <Group x={viewport.x} y={viewport.y} scaleX={viewport.scale} scaleY={viewport.scale}>
-                <BaseImageLayer imageUrl={displayImageUrl} width={imageWidth} height={imageHeight} />
+                {showBeforeAfter && imageUrl && transformedImageUrl ? (
+                  <>
+                    <BaseImageLayer imageUrl={imageUrl} width={imageWidth} height={imageHeight} />
+                    <Group
+                      clipX={0}
+                      clipY={0}
+                      clipWidth={imageWidth * (beforeAfterPercent / 100)}
+                      clipHeight={imageHeight}
+                    >
+                      <BaseImageLayer
+                        imageUrl={transformedImageUrl}
+                        width={imageWidth}
+                        height={imageHeight}
+                      />
+                    </Group>
+                    <Rect
+                      x={imageWidth * (beforeAfterPercent / 100) - 1}
+                      y={0}
+                      width={2}
+                      height={imageHeight}
+                      fill="#f8fafc"
+                      opacity={0.9}
+                      listening={false}
+                    />
+                  </>
+                ) : (
+                  <BaseImageLayer
+                    imageUrl={displayImageUrl}
+                    width={imageWidth}
+                    height={imageHeight}
+                  />
+                )}
                 <AnnotationLayer
                   onPointClick={(point) =>
                     handlePointClickForAxis(
@@ -227,6 +263,26 @@ function CanvasStage() {
             </Layer>
           </Stage>
         )}
+        {imageUrl && transformedImageUrl ? (
+          <div className="absolute bottom-4 left-1/2 flex w-[min(520px,calc(100%-48px))] -translate-x-1/2 items-center gap-3 rounded-md border border-neutral-700 bg-neutral-950/90 px-4 py-3 shadow-lg backdrop-blur">
+            <span className="text-xs font-medium text-neutral-400">Before</span>
+            <input
+              className="h-2 flex-1 accent-sky-400"
+              type="range"
+              min="0"
+              max="100"
+              value={beforeAfterPercent}
+              onChange={(event) => {
+                setBeforeAfterPercent(Number(event.target.value));
+                setShowCompare(true);
+              }}
+            />
+            <span className="text-xs font-medium text-neutral-400">After</span>
+            <span className="w-9 text-right text-xs text-neutral-500">
+              {beforeAfterPercent}%
+            </span>
+          </div>
+        ) : null}
       </div>
     </section>
   );

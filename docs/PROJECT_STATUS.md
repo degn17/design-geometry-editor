@@ -50,6 +50,8 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
   - 选中对象有视觉高亮
   - 可从右侧 Inspector 删除当前选中的点、轴线、影响区域或锁定区域
   - 删除点时会同步删除依赖该点的轴线
+  - 可在右侧 Object List 中按 Points / Axes / Regions / Locked Regions 查看和选择对象
+  - 支持按 Delete / Backspace 删除当前选中对象，输入框、文本域和选择框聚焦时不会触发快捷删除
 - 右侧参数面板：
   - 未选中对象时显示项目状态
   - 选中 Point / Region / LockedRegion 时显示基础属性
@@ -62,12 +64,14 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
   - 点击同一个点作为起点和终点时不会创建轴线，并提示“起点和终点不能相同”
   - `free` 方向没有在 UI 中开放，并明确提示 MVP 暂不支持
   - 选中 Region / Lock 后可拖拽右下角 handle 调整矩形宽高，最小 10x10
+  - Region / Lock 可拖拽移动位置
 - 基础图像变形：
   - `applyBasicStretch` 会对选中的影响区域做水平或垂直基础缩放
   - 锁定区域会从原图重新贴回原位置
   - 生成 `transformedImageUrl`
 - 对比：
   - 支持 Original / Transformed 切换
+  - 生成变形图后支持 Before / After slider 对比，原图在底层、变形图按滑杆比例裁切显示
 - 导出：
   - 支持导出当前显示图像为 PNG
 - README 已包含运行方式、功能、限制和后续方向。
@@ -79,9 +83,8 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
 - 精确 mesh warp / TPS / cage deformation。
 - 真实 3D 透视或汽车结构理解。
 - 八方向区域 resize handles。
-- 区域移动、旋转和复杂约束编辑。
+- 区域旋转和复杂约束编辑。
 - 对象名称和类型的完整编辑 UI。
-- before / after slider。
 - 多版本历史。
 - 撤销 / 重做。
 - 本地项目保存 / 加载。
@@ -108,7 +111,9 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
 ├── docs/
 │   ├── CODEX_TASK.md
 │   ├── MANUAL_TEST_RESULT_001.md
+│   ├── MANUAL_TEST_RESULT_002.md
 │   ├── NEXT_TASK_P0_USABILITY.md
+│   ├── NEXT_TASK_P05_TESTABILITY.md
 │   └── PROJECT_STATUS.md
 ├── scratch/
 │   └── .gitkeep
@@ -238,9 +243,9 @@ npm run build
 - 基础算法只区分 horizontal / vertical；`free` 方向当前未在 UI 中开放。
 - 右侧面板中 Axis 的 influence region 选择默认使用第一个 region，复杂场景下还需要更明确的引导。
 - `Transform` 工具按钮目前主要作为工具状态存在，实际变形入口在选中 Axis 后的右侧面板。
-- Compare 当前是按钮切换，不是滑杆。
+- Before / After slider 是基础裁切对比，不是精细的交互式分屏组件。
 - 当前只有基础错误提示，上传失败或底层变形异常还没有统一的错误提示系统。
-- Region / Lock 只有右下角单向 resize，没有移动、八方向 resize 或旋转。
+- Region / Lock 支持移动和右下角单向 resize，但没有八方向 resize 或旋转。
 - 项目目录中存在 `.DS_Store` 文件，后续可以清理，但本次没有删除。
 - `node_modules/` 已通过 `npm install` 生成，但应保持忽略，不应提交。
 - 完整 `npm audit` 显示 Vite/esbuild 开发依赖链有 2 个 moderate 漏洞；`npm audit --omit=dev` 显示生产依赖 0 vulnerabilities。自动修复需要 breaking upgrade，当前未执行。
@@ -251,7 +256,8 @@ npm run build
 - `RightPanel.tsx` 同时负责状态查询、Axis 参数编辑和对象属性展示，后续可拆成更小的 inspector 组件。
 - 当前没有测试覆盖，核心风险集中在坐标转换、点拖拽后轴线长度更新、区域变形和导出。
 - 变形算法没有 mask、feather、边缘融合或局部位移场。
-- 删除能力已经暴露在 UI 中，但还没有键盘 Delete / Backspace 快捷键。
+- Object List 目前只支持查看和选择对象，不支持重命名、排序或按类型过滤。
+- 键盘删除逻辑在 RightPanel 中实现，后续如果快捷键增多，应抽成统一 keyboard shortcut 层。
 - `createId` 是简单运行时 ID 生成器，不适合长期持久化数据。
 - 没有项目文件保存格式，刷新页面会丢失所有编辑状态。
 - 当前没有集中错误处理和用户提示机制，提示文本分散在画布顶部和右侧面板中。
@@ -260,11 +266,10 @@ npm run build
 
 ### P0
 
-- 增加键盘 Delete / Backspace 删除选中对象。
-- 增加 Region / Lock 的移动能力。
 - 增加上传失败、变形异常等更完整的错误提示。
 - 增加 Axis 创建流程的可视化起点标记。
-- 增加对象列表，帮助用户在复杂标注场景中快速选择对象。
+- 增加 Object List 的重命名入口或属性编辑入口。
+- 改进 Before / After slider 的视觉手柄和标签。
 
 ### P1
 
@@ -285,7 +290,17 @@ npm run build
 
 ## 11. 本轮创建或修改过的文件列表
 
-本轮 P0 可用性增强修改：
+本轮 P0.5 可测试性增强修改：
+
+- `src/components/CanvasStage.tsx`
+- `src/components/RightPanel.tsx`
+- `src/components/canvas/AnnotationLayer.tsx`
+- `src/components/canvas/RegionLayer.tsx`
+- `src/components/canvas/LockLayer.tsx`
+- `docs/MANUAL_TEST_RESULT_002.md`
+- `docs/PROJECT_STATUS.md`
+
+上一轮 P0 可用性增强修改：
 
 - `src/components/RightPanel.tsx`
 - `src/components/CanvasStage.tsx`
@@ -294,6 +309,11 @@ npm run build
 - `src/components/canvas/LockLayer.tsx`
 - `docs/MANUAL_TEST_RESULT_001.md`
 - `docs/PROJECT_STATUS.md`
+
+当前测试记录文件：
+
+- `docs/MANUAL_TEST_RESULT_001.md`
+- `docs/MANUAL_TEST_RESULT_002.md`
 
 截至当前 MVP 实现，项目中已创建或修改的主要文件包括：
 

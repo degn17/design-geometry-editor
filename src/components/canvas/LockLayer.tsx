@@ -7,13 +7,14 @@ interface LockLayerProps {
   lockedRegions: LockedRegion[];
   selectedId: string | null;
   onSelect(id: string): void;
+  onMove(id: string, x: number, y: number): void;
   onResize(id: string, width: number, height: number): void;
 }
 
 const MIN_LOCK_SIZE = 10;
 const HANDLE_SIZE = 10;
 
-function LockLayer({ lockedRegions, selectedId, onSelect, onResize }: LockLayerProps) {
+function LockLayer({ lockedRegions, selectedId, onSelect, onMove, onResize }: LockLayerProps) {
   return (
     <>
       {lockedRegions.map((region) => {
@@ -30,9 +31,13 @@ function LockLayer({ lockedRegions, selectedId, onSelect, onResize }: LockLayerP
               stroke={isSelected ? "#f8fafc" : "#fb923c"}
               strokeWidth={isSelected ? 3 : 2}
               dash={[6, 5]}
+              draggable
               onMouseDown={(event) => {
                 event.cancelBubble = true;
               }}
+              onDragStart={() => onSelect(region.id)}
+              onDragMove={(event) => onMove(region.id, event.target.x(), event.target.y())}
+              onDragEnd={(event) => onMove(region.id, event.target.x(), event.target.y())}
               onClick={(event) => handleSelect(event, region.id, onSelect)}
               onTap={(event) => handleSelect(event, region.id, onSelect)}
             />
