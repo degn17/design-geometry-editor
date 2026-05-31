@@ -15,6 +15,10 @@ function RightPanel() {
     selectedId,
     transformedImageUrl,
     updateAxis,
+    deletePoint,
+    deleteAxis,
+    deleteRegion,
+    deleteLockedRegion,
     applyTransform,
   } = useEditorStore((state) => ({
     imageUrl: state.imageUrl,
@@ -27,6 +31,10 @@ function RightPanel() {
     selectedId: state.selectedId,
     transformedImageUrl: state.transformedImageUrl,
     updateAxis: state.updateAxis,
+    deletePoint: state.deletePoint,
+    deleteAxis: state.deleteAxis,
+    deleteRegion: state.deleteRegion,
+    deleteLockedRegion: state.deleteLockedRegion,
     applyTransform: state.applyTransform,
   }));
   const [selectedRegionId, setSelectedRegionId] = useState<string>("");
@@ -43,6 +51,17 @@ function RightPanel() {
       setSelectedRegionId(regions[0].id);
     }
   }, [regions, selectedRegionId]);
+
+  const validationMessage =
+    selectedObject?.kind === "axis"
+      ? getTransformValidationMessage({
+          hasImage: Boolean(imageUrl),
+          hasAxis: true,
+          hasRegions: regions.length > 0,
+          selectedRegionId,
+          changePercent: selectedObject.value.changePercent ?? 0,
+        })
+      : null;
 
   return (
     <aside className="h-full overflow-y-auto border-l border-neutral-800 bg-neutral-950 p-4">
@@ -74,11 +93,25 @@ function RightPanel() {
             selectedRegionId={selectedRegionId}
             selectedLockedIds={selectedLockedIds}
             isApplying={isApplying}
-            canApply={Boolean(imageUrl && selectedRegionId)}
+            canApply={!validationMessage}
+            validationMessage={validationMessage}
             onRegionChange={setSelectedRegionId}
             onLockedChange={setSelectedLockedIds}
             onAxisChange={(patch) => updateAxis(selectedObject.value.id, patch)}
             onApply={async () => {
+              const nextValidationMessage = getTransformValidationMessage({
+                hasImage: Boolean(imageUrl),
+                hasAxis: true,
+                hasRegions: regions.length > 0,
+                selectedRegionId,
+                changePercent: selectedObject.value.changePercent ?? 0,
+              });
+
+              if (nextValidationMessage) {
+                setMessage(nextValidationMessage);
+                return;
+              }
+
               setIsApplying(true);
               setMessage(null);
               try {
@@ -108,6 +141,23 @@ function RightPanel() {
             inspect their properties.
           </p>
         )}
+        {selectedObject ? (
+          <button
+            type="button"
+            className="mt-4 w-full rounded-md border border-red-400/70 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-500/20"
+            onClick={() => {
+              deleteSelectedObject(selectedObject, {
+                deletePoint,
+                deleteAxis,
+                deleteRegion,
+                deleteLockedRegion,
+              });
+              setMessage("Selected object deleted.");
+            }}
+          >
+            Delete Selected
+          </button>
+        ) : null}
         {message ? <p className="mt-3 text-xs text-emerald-300">{message}</p> : null}
       </section>
     </aside>
@@ -131,6 +181,7 @@ function AxisInspector({
   selectedLockedIds,
   isApplying,
   canApply,
+  validationMessage,
   onRegionChange,
   onLockedChange,
   onAxisChange,
@@ -143,6 +194,7 @@ function AxisInspector({
   selectedLockedIds: string[];
   isApplying: boolean;
   canApply: boolean;
+  validationMessage: string | null;
   onRegionChange(id: string): void;
   onLockedChange(ids: string[]): void;
   onAxisChange(patch: Partial<DesignAxis>): void;
@@ -199,15 +251,17 @@ function AxisInspector({
         <span className="mb-1 block text-neutral-400">Direction</span>
         <select
           className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none focus:border-sky-400"
-          value={axis.direction}
+          value={axis.direction === "free" ? "horizontal" : axis.direction}
           onChange={(event) =>
             onAxisChange({ direction: event.target.value as DesignAxis["direction"] })
           }
         >
           <option value="horizontal">Horizontal</option>
           <option value="vertical">Vertical</option>
-          <option value="free">Free</option>
         </select>
+        <span className="mt-1 block text-xs text-neutral-500">
+          Free direction is not supported in this MVP.
+        </span>
       </label>
 
       <label className="block text-sm">
@@ -275,6 +329,7 @@ function AxisInspector({
       >
         {isApplying ? "Applying..." : "Apply Transform"}
       </button>
+      {validationMessage ? <p className="text-xs text-amber-300">{validationMessage}</p> : null}
     </div>
   );
 }
@@ -343,6 +398,71 @@ function findSelectedObject(
   const lockedRegion = lockedRegions.find((candidate) => candidate.id === selectedId);
   if (lockedRegion) {
     return { kind: "lock" as const, value: lockedRegion };
+  }
+
+  return null;
+}
+
+type SelectedObject = NonNullable<ReturnType<typeof findSelectedObject>>;
+
+function deleteSelectedObject(
+  selectedObject: SelectedObject,
+  actions: {
+    deletePoint(id: string): void;
+    deleteAxis(id: string): void;
+    deleteRegion(id: string): void;
+    deleteLockedRegion(id: string): void;
+  }
+) {
+  if (selectedObject.kind === "point") {
+    actions.deletePoint(selectedObject.value.id);
+    return;
+  }
+
+  if (selectedObject.kind === "axis") {
+    actions.deleteAxis(selectedObject.value.id);
+    return;
+  }
+
+  if (selectedObject.kind === "region") {
+    actions.deleteRegion(selectedObject.value.id);
+    return;
+  }
+
+  actions.deleteLockedRegion(selectedObject.value.id);
+}
+
+function getTransformValidationMessage({
+  hasImage,
+  hasAxis,
+  hasRegions,
+  selectedRegionId,
+  changePercent,
+}: {
+  hasImage: boolean;
+  hasAxis: boolean;
+  hasRegions: boolean;
+  selectedRegionId: string;
+  changePercent: number;
+}) {
+  if (!hasImage) {
+    return "Upload an image before applying a transform.";
+  }
+
+  if (!hasAxis) {
+    return "Select an axis before applying a transform.";
+  }
+
+  if (!hasRegions) {
+    return "Create an influence region before applying a transform.";
+  }
+
+  if (!selectedRegionId) {
+    return "Select an influence region before applying a transform.";
+  }
+
+  if (!Number.isFinite(changePercent)) {
+    return "Enter a valid change percent before applying a transform.";
   }
 
   return null;

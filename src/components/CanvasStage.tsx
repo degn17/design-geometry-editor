@@ -48,6 +48,7 @@ function CanvasStage() {
   const [draftRect, setDraftRect] = useState<RectLike | null>(null);
   const [dragStart, setDragStart] = useState<PointLike | null>(null);
   const [pendingAxisStartId, setPendingAxisStartId] = useState<string | null>(null);
+  const [axisMessage, setAxisMessage] = useState<string | null>(null);
   const displayImageUrl = showCompare && transformedImageUrl ? transformedImageUrl : imageUrl;
 
   useEffect(() => {
@@ -72,6 +73,23 @@ function CanvasStage() {
     [imageHeight, imageWidth, stageSize.height, stageSize.width]
   );
 
+  useEffect(() => {
+    if (activeTool !== "axis") {
+      setPendingAxisStartId(null);
+      setAxisMessage(null);
+      return;
+    }
+
+    setAxisMessage((currentMessage) =>
+      currentMessage === "起点和终点不能相同" ? currentMessage : null
+    );
+  }, [activeTool]);
+
+  const axisPrompt =
+    activeTool === "axis"
+      ? axisMessage ?? (pendingAxisStartId ? "请选择轴线终点" : "请选择轴线起点")
+      : null;
+
   return (
     <section className="flex min-w-0 flex-col bg-neutral-900">
       <div className="flex h-12 items-center justify-between border-b border-neutral-800 px-4">
@@ -80,6 +98,11 @@ function CanvasStage() {
           <p className="text-xs text-neutral-500">MVP v0.1 local prototype</p>
         </div>
         <div className="flex items-center gap-3">
+          {axisPrompt ? (
+            <span className="rounded-md border border-sky-500/50 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-100">
+              {axisPrompt}
+            </span>
+          ) : null}
           <CompareView />
           <span className="text-xs text-neutral-500">
             {imageUrl ? `${imageWidth} x ${imageHeight}px` : "No image loaded"}
@@ -178,6 +201,7 @@ function CanvasStage() {
                       points,
                       axes.length,
                       setPendingAxisStartId,
+                      setAxisMessage,
                       addAxis
                     )
                   }
@@ -261,6 +285,7 @@ function handlePointClickForAxis(
   points: DesignPoint[],
   axisCount: number,
   setPendingAxisStartId: (id: string | null) => void,
+  setAxisMessage: (message: string | null) => void,
   addAxis: ReturnType<typeof useEditorStore.getState>["addAxis"]
 ) {
   if (activeTool !== "axis") {
@@ -269,17 +294,19 @@ function handlePointClickForAxis(
 
   if (!pendingAxisStartId) {
     setPendingAxisStartId(point.id);
+    setAxisMessage(null);
     return;
   }
 
   if (pendingAxisStartId === point.id) {
-    setPendingAxisStartId(null);
+    setAxisMessage("起点和终点不能相同");
     return;
   }
 
   const startPoint = points.find((candidate) => candidate.id === pendingAxisStartId);
   if (!startPoint) {
     setPendingAxisStartId(point.id);
+    setAxisMessage(null);
     return;
   }
 
@@ -293,6 +320,7 @@ function handlePointClickForAxis(
     anchorMode: "startFixed",
   });
   setPendingAxisStartId(null);
+  setAxisMessage(null);
 }
 
 export default CanvasStage;

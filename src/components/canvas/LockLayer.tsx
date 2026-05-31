@@ -7,9 +7,13 @@ interface LockLayerProps {
   lockedRegions: LockedRegion[];
   selectedId: string | null;
   onSelect(id: string): void;
+  onResize(id: string, width: number, height: number): void;
 }
 
-function LockLayer({ lockedRegions, selectedId, onSelect }: LockLayerProps) {
+const MIN_LOCK_SIZE = 10;
+const HANDLE_SIZE = 10;
+
+function LockLayer({ lockedRegions, selectedId, onSelect, onResize }: LockLayerProps) {
   return (
     <>
       {lockedRegions.map((region) => {
@@ -40,6 +44,45 @@ function LockLayer({ lockedRegions, selectedId, onSelect }: LockLayerProps) {
               fill="#ffedd5"
               listening={false}
             />
+            {isSelected ? (
+              <Rect
+                x={region.x + region.width - HANDLE_SIZE / 2}
+                y={region.y + region.height - HANDLE_SIZE / 2}
+                width={HANDLE_SIZE}
+                height={HANDLE_SIZE}
+                fill="#ffedd5"
+                stroke="#ea580c"
+                strokeWidth={1}
+                draggable
+                onMouseDown={(event) => {
+                  event.cancelBubble = true;
+                }}
+                onDragMove={(event) => {
+                  event.cancelBubble = true;
+                  const nextWidth = Math.max(
+                    MIN_LOCK_SIZE,
+                    event.target.x() - region.x + HANDLE_SIZE / 2
+                  );
+                  const nextHeight = Math.max(
+                    MIN_LOCK_SIZE,
+                    event.target.y() - region.y + HANDLE_SIZE / 2
+                  );
+                  onResize(region.id, nextWidth, nextHeight);
+                }}
+                onDragEnd={(event) => {
+                  event.cancelBubble = true;
+                  const nextWidth = Math.max(
+                    MIN_LOCK_SIZE,
+                    event.target.x() - region.x + HANDLE_SIZE / 2
+                  );
+                  const nextHeight = Math.max(
+                    MIN_LOCK_SIZE,
+                    event.target.y() - region.y + HANDLE_SIZE / 2
+                  );
+                  onResize(region.id, nextWidth, nextHeight);
+                }}
+              />
+            ) : null}
           </Fragment>
         );
       })}

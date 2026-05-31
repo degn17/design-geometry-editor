@@ -18,6 +18,8 @@ function AnnotationLayer({ onPointClick }: AnnotationLayerProps) {
     selectedId,
     setSelectedId,
     updatePoint,
+    updateRegion,
+    updateLockedRegion,
   } = useEditorStore((state) => ({
     points: state.points,
     axes: state.axes,
@@ -26,15 +28,23 @@ function AnnotationLayer({ onPointClick }: AnnotationLayerProps) {
     selectedId: state.selectedId,
     setSelectedId: state.setSelectedId,
     updatePoint: state.updatePoint,
+    updateRegion: state.updateRegion,
+    updateLockedRegion: state.updateLockedRegion,
   }));
 
   return (
     <>
-      <RegionLayer regions={regions} selectedId={selectedId} onSelect={setSelectedId} />
+      <RegionLayer
+        regions={regions}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        onResize={(id, width, height) => updateRegion(id, { width, height })}
+      />
       <LockLayer
         lockedRegions={lockedRegions}
         selectedId={selectedId}
         onSelect={setSelectedId}
+        onResize={(id, width, height) => updateLockedRegion(id, { width, height })}
       />
       <AxisLayer axes={axes} points={points} selectedId={selectedId} onSelect={setSelectedId} />
       <PointsLayer
