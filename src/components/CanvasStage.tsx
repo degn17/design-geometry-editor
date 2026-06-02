@@ -1,10 +1,12 @@
 import type { KonvaEventObject } from "konva/lib/Node";
+import type { DragEvent } from "react";
 import { useMemo, useRef, useState, useEffect } from "react";
 import { Group, Layer, Rect, Stage } from "react-konva";
 import { useEditorStore } from "../store/editorStore";
 import type { DesignPoint, EditorTool } from "../types/editor";
 import { getDistance, normalizeRect, type PointLike, type RectLike } from "../utils/geometry";
 import { createId } from "../utils/ids";
+import { readImageFile } from "../utils/imageUpload";
 import CompareView from "./CompareView";
 import AnnotationLayer from "./canvas/AnnotationLayer";
 import BaseImageLayer from "./canvas/BaseImageLayer";
@@ -27,6 +29,7 @@ function CanvasStage() {
     addRegion,
     addLockedRegion,
     setSelectedId,
+    setImage,
   } = useEditorStore((state) => ({
     activeTool: state.activeTool,
     imageUrl: state.imageUrl,
@@ -44,11 +47,14 @@ function CanvasStage() {
     addRegion: state.addRegion,
     addLockedRegion: state.addLockedRegion,
     setSelectedId: state.setSelectedId,
+    setImage: state.setImage,
   }));
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
   const [draftRect, setDraftRect] = useState<RectLike | null>(null);
   const [dragStart, setDragStart] = useState<PointLike | null>(null);
+  const [isFileDragActive, setIsFileDragActive] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [pendingAxisStartId, setPendingAxisStartId] = useState<string | null>(null);
   const [axisMessage, setAxisMessage] = useState<string | null>(null);
   const [beforeAfterPercent, setBeforeAfterPercent] = useState(100);
@@ -95,6 +101,59 @@ function CanvasStage() {
       ? axisMessage ?? (pendingAxisStartId ? "请选择轴线终点" : "请选择轴线起点")
       : null;
 
+  async function handleDroppedFile(file: File) {
+    try {
+      const image = await readImageFile(file);
+      setImage(image.dataUrl, image.width, image.height);
+      setUploadError(null);
+      setBeforeAfterPercent(100);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Unable to upload image.");
+    }
+  }
+
+  function handleDragEnter(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (hasFileDrop(event)) {
+      setIsFileDragActive(true);
+    }
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (hasFileDrop(event)) {
+      event.dataTransfer.dropEffect = "copy";
+      setIsFileDragActive(true);
+    }
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
+      return;
+    }
+
+    setIsFileDragActive(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsFileDragActive(false);
+
+    const file = event.dataTransfer.files[0];
+    if (file) {
+      void handleDroppedFile(file);
+    }
+  }
+
   return (
     <section className="flex min-w-0 flex-col bg-neutral-900">
       <div className="flex h-12 items-center justify-between border-b border-neutral-800 px-4">
@@ -115,10 +174,32 @@ function CanvasStage() {
         </div>
       </div>
 
-      <div ref={containerRef} className="relative flex-1 overflow-hidden bg-neutral-950">
+      <div
+        ref={containerRef}
+        className="relative flex-1 overflow-hidden bg-neutral-950"
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
         {!displayImageUrl || imageWidth === 0 || imageHeight === 0 ? (
-          <div className="absolute inset-6 flex items-center justify-center rounded-md border border-dashed border-neutral-700 text-sm text-neutral-500">
-            Upload a side-view car image to start annotating.
+          <div
+            className={`absolute inset-6 flex flex-col items-center justify-center rounded-md border border-dashed px-6 text-center transition ${
+              isFileDragActive
+                ? "border-sky-300 bg-sky-500/10 text-sky-100"
+                : "border-neutral-700 bg-neutral-900/40 text-neutral-400"
+            }`}
+          >
+            <p className="text-base font-semibold text-neutral-100">
+              {isFileDragActive ? "Release to upload image" : "Drop image here"}
+            </p>
+            <p className="mt-2 text-sm">or click Upload Image</p>
+            <p className="mt-1 text-xs text-neutral-500">Supported: JPG, PNG, WebP</p>
+            {uploadError ? (
+              <p className="mt-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+                {uploadError}
+              </p>
+            ) : null}
           </div>
         ) : (
           <Stage
@@ -263,6 +344,17 @@ function CanvasStage() {
             </Layer>
           </Stage>
         )}
+        {displayImageUrl && isFileDragActive ? (
+          <div className="pointer-events-none absolute inset-6 flex flex-col items-center justify-center rounded-md border border-dashed border-sky-300 bg-sky-500/15 text-center text-sky-100 shadow-[0_0_0_999px_rgba(10,10,10,0.35)]">
+            <p className="text-base font-semibold">Release to upload image</p>
+            <p className="mt-2 text-sm text-sky-100/80">Current image will be replaced</p>
+          </div>
+        ) : null}
+        {displayImageUrl && uploadError && !isFileDragActive ? (
+          <div className="absolute left-4 top-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-100 shadow-lg">
+            {uploadError}
+          </div>
+        ) : null}
         {imageUrl && transformedImageUrl ? (
           <div className="absolute bottom-4 left-1/2 flex w-[min(520px,calc(100%-48px))] -translate-x-1/2 items-center gap-3 rounded-md border border-neutral-700 bg-neutral-950/90 px-4 py-3 shadow-lg backdrop-blur">
             <span className="text-xs font-medium text-neutral-400">Before</span>
@@ -286,6 +378,10 @@ function CanvasStage() {
       </div>
     </section>
   );
+}
+
+function hasFileDrop(event: DragEvent<HTMLDivElement>) {
+  return Array.from(event.dataTransfer.types).includes("Files");
 }
 
 function getImageViewport(

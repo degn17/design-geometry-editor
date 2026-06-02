@@ -25,7 +25,10 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
   - 支持 jpg / jpeg / png / webp
   - 读取图片为 data URL
   - 读取图片原始宽高
+  - 支持通过左侧 `Upload Image` 按钮上传
+  - 支持把图片拖拽到中间画布区域上传或替换当前图片
   - 上传新图后清空旧标注和变形结果
+  - 上传新图后清空旧 points / axes / regions / locked regions，并回到 Original 显示状态
 - 控制点标注：
   - Point 工具点击画布添加点
   - 自动命名为 `Point 1`、`Point 2` 等
@@ -93,6 +96,7 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
 - 多版本历史。
 - 撤销 / 重做。
 - 本地项目保存 / 加载。
+  - 当前仍未实现本地保存 / 加载，刷新页面会丢失上传图片和编辑状态。
 - 后端、数据库、登录、云端存储、多用户协作。
 - 单元测试或端到端测试。
 
@@ -119,6 +123,7 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
 │   ├── MANUAL_TEST_RESULT_002.md
 │   ├── MANUAL_TEST_RESULT_003.md
 │   ├── MANUAL_TEST_RESULT_004.md
+│   ├── MANUAL_TEST_RESULT_005.md
 │   ├── NEXT_TASK_P0_USABILITY.md
 │   ├── NEXT_TASK_P05_TESTABILITY.md
 │   ├── NEXT_TASK_P1_VECTOR_CONTROL.md
@@ -149,6 +154,7 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
     ├── types/
     │   └── editor.ts
     └── utils/
+        ├── imageUpload.ts
         ├── imageTransform.ts
         ├── exportCanvas.ts
         ├── geometry.ts
@@ -336,6 +342,15 @@ npm run build
 - `docs/MANUAL_TEST_RESULT_002.md`
 - `docs/MANUAL_TEST_RESULT_003.md`
 - `docs/MANUAL_TEST_RESULT_004.md`
+- `docs/MANUAL_TEST_RESULT_005.md`
+
+本轮 P1 Drag Upload 修改：
+
+- `src/utils/imageUpload.ts`
+- `src/components/ImageUploader.tsx`
+- `src/components/CanvasStage.tsx`
+- `docs/MANUAL_TEST_RESULT_005.md`
+- `docs/PROJECT_STATUS.md`
 
 截至当前 MVP 实现，项目中已创建或修改的主要文件包括：
 
@@ -368,6 +383,7 @@ npm run build
 - `src/store/editorStore.ts`
 - `src/types/editor.ts`
 - `src/utils/imageTransform.ts`
+- `src/utils/imageUpload.ts`
 - `src/utils/exportCanvas.ts`
 - `src/utils/geometry.ts`
 - `src/utils/ids.ts`
