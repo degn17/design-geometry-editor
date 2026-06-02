@@ -31,6 +31,9 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
   - 自动命名为 `Point 1`、`Point 2` 等
   - 点可拖拽
   - 点移动后关联轴线长度会重新计算
+  - 按住 Command / Ctrl 拖动 Point 时，不移动原始点，而是生成位移向量 displacement
+  - Point displacement 会记录 `dx`、`dy`、`targetX`、`targetY`、`influenceRadius`、`enabled`
+  - 画布会可视化位移向量、目标点和 influence radius
 - 轴线创建：
   - Axis 工具点击两个已有点创建轴线
   - 自动计算 `currentLength`
@@ -72,6 +75,7 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
 - 对比：
   - 支持 Original / Transformed 切换
   - 生成变形图后支持 Before / After slider 对比，原图在底层、变形图按滑杆比例裁切显示
+  - 删除 Point / Axis / Region / LockedRegion 后会清空当前 transformed image，避免 slider 显示过期结果
 - 导出：
   - 支持导出当前显示图像为 PNG
 - README 已包含运行方式、功能、限制和后续方向。
@@ -81,6 +85,7 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
 - AI 修复 / inpainting。
 - 自动识别汽车部件，例如车轮、灯、车身边界。
 - 精确 mesh warp / TPS / cage deformation。
+- Point displacement / vector control 尚未驱动真实图像变形。
 - 真实 3D 透视或汽车结构理解。
 - 八方向区域 resize handles。
 - 区域旋转和复杂约束编辑。
@@ -112,8 +117,11 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
 │   ├── CODEX_TASK.md
 │   ├── MANUAL_TEST_RESULT_001.md
 │   ├── MANUAL_TEST_RESULT_002.md
+│   ├── MANUAL_TEST_RESULT_003.md
+│   ├── MANUAL_TEST_RESULT_004.md
 │   ├── NEXT_TASK_P0_USABILITY.md
 │   ├── NEXT_TASK_P05_TESTABILITY.md
+│   ├── NEXT_TASK_P1_VECTOR_CONTROL.md
 │   └── PROJECT_STATUS.md
 ├── scratch/
 │   └── .gitkeep
@@ -240,6 +248,7 @@ npm run build
 - 基础拉伸算法只对矩形区域做简单缩放，不是高质量图像编辑算法。
 - 锁定区域只是原图裁切后贴回，边缘可能不自然。
 - 当前变形仍可能产生拉伸断裂、重叠、空白或细节破坏。
+- Point displacement 当前只是交互和数据原型，尚未用于驱动 `applyBasicStretch` 或其他图像变形算法。
 - 基础算法只区分 horizontal / vertical；`free` 方向当前未在 UI 中开放。
 - 右侧面板中 Axis 的 influence region 选择默认使用第一个 region，复杂场景下还需要更明确的引导。
 - `Transform` 工具按钮目前主要作为工具状态存在，实际变形入口在选中 Axis 后的右侧面板。
@@ -256,6 +265,7 @@ npm run build
 - `RightPanel.tsx` 同时负责状态查询、Axis 参数编辑和对象属性展示，后续可拆成更小的 inspector 组件。
 - 当前没有测试覆盖，核心风险集中在坐标转换、点拖拽后轴线长度更新、区域变形和导出。
 - 变形算法没有 mask、feather、边缘融合或局部位移场。
+- Point displacement 可视化逻辑仍在 `PointsLayer.tsx` 中，后续如果向量控制复杂化，应拆出独立 layer 或组件。
 - Object List 目前只支持查看和选择对象，不支持重命名、排序或按类型过滤。
 - 键盘删除逻辑在 RightPanel 中实现，后续如果快捷键增多，应抽成统一 keyboard shortcut 层。
 - `createId` 是简单运行时 ID 生成器，不适合长期持久化数据。
@@ -274,8 +284,8 @@ npm run build
 ### P1
 
 - 拆分 `CanvasStage.tsx` 和 `RightPanel.tsx`，降低组件复杂度。
+- 使用 displacement vector + influenceRadius 驱动局部图像变形。
 - 增加 undo / redo。
-- 增加 before / after slider。
 - 增加本地 JSON 保存/加载编辑状态。
 - 增加基础测试，优先覆盖 geometry、imageTransform、store actions。
 - 改进锁定区域贴回逻辑，至少增加边缘 feather。
@@ -289,6 +299,16 @@ npm run build
 - 增加更专业的设计工具交互，例如快捷键、对象列表、图层面板。
 
 ## 11. 本轮创建或修改过的文件列表
+
+本轮 P1 Vector Control Prototype 修改：
+
+- `src/types/editor.ts`
+- `src/store/editorStore.ts`
+- `src/components/canvas/PointsLayer.tsx`
+- `src/components/canvas/AnnotationLayer.tsx`
+- `src/components/RightPanel.tsx`
+- `docs/MANUAL_TEST_RESULT_004.md`
+- `docs/PROJECT_STATUS.md`
 
 本轮 P0.5 可测试性增强修改：
 
@@ -314,6 +334,8 @@ npm run build
 
 - `docs/MANUAL_TEST_RESULT_001.md`
 - `docs/MANUAL_TEST_RESULT_002.md`
+- `docs/MANUAL_TEST_RESULT_003.md`
+- `docs/MANUAL_TEST_RESULT_004.md`
 
 截至当前 MVP 实现，项目中已创建或修改的主要文件包括：
 

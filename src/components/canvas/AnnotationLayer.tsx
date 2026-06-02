@@ -54,6 +54,7 @@ function AnnotationLayer({ onPointClick }: AnnotationLayerProps) {
         selectedId={selectedId}
         onSelect={setSelectedId}
         onMove={(id, x, y) => updatePoint(id, { x, y })}
+        onDisplacement={(id, displacement) => updatePoint(id, { displacement })}
         onPointClick={onPointClick}
       />
     </>

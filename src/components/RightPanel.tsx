@@ -16,6 +16,7 @@ function RightPanel() {
     transformedImageUrl,
     setSelectedId,
     updateAxis,
+    updatePoint,
     deletePoint,
     deleteAxis,
     deleteRegion,
@@ -33,6 +34,7 @@ function RightPanel() {
     transformedImageUrl: state.transformedImageUrl,
     setSelectedId: state.setSelectedId,
     updateAxis: state.updateAxis,
+    updatePoint: state.updatePoint,
     deletePoint: state.deletePoint,
     deleteAxis: state.deleteAxis,
     deleteRegion: state.deleteRegion,
@@ -156,7 +158,10 @@ function RightPanel() {
             }}
           />
         ) : selectedObject ? (
-          <ObjectInspector selectedObject={selectedObject} />
+          <ObjectInspector
+            selectedObject={selectedObject}
+            onClearDisplacement={(id) => updatePoint(id, { displacement: undefined })}
+          />
         ) : (
           <p className="text-sm text-neutral-500">
             Select an axis to enter transform parameters. Select points, regions, or locks to
@@ -367,13 +372,20 @@ function AxisInspector({
 
 function ObjectInspector({
   selectedObject,
+  onClearDisplacement,
 }: {
   selectedObject:
     | { kind: "point"; value: DesignPoint }
     | { kind: "region"; value: DesignRegion }
     | { kind: "lock"; value: LockedRegion };
+  onClearDisplacement(id: string): void;
 }) {
   const value = selectedObject.value;
+  const displacement =
+    selectedObject.kind === "point" && selectedObject.value.displacement?.enabled
+      ? selectedObject.value.displacement
+      : null;
+
   return (
     <div className="space-y-3">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
@@ -387,6 +399,37 @@ function ObjectInspector({
         <ReadOnlyField label="Height" value={Math.round(value.height).toString()} />
       ) : null}
       <ReadOnlyField label="Type" value={value.type} />
+      {selectedObject.kind === "point" ? (
+        <>
+          <ReadOnlyField label="Displacement" value={displacement ? "Enabled" : "None"} />
+          {displacement ? (
+            <>
+              <ReadOnlyField label="dx" value={Math.round(displacement.dx).toString()} />
+              <ReadOnlyField label="dy" value={Math.round(displacement.dy).toString()} />
+              <ReadOnlyField
+                label="targetX"
+                value={Math.round(displacement.targetX).toString()}
+              />
+              <ReadOnlyField
+                label="targetY"
+                value={Math.round(displacement.targetY).toString()}
+              />
+              <ReadOnlyField
+                label="Influence radius"
+                value={Math.round(displacement.influenceRadius).toString()}
+              />
+              <ReadOnlyField label="Enabled" value={displacement.enabled ? "true" : "false"} />
+              <button
+                type="button"
+                className="w-full rounded-md border border-orange-300/70 bg-orange-500/10 px-3 py-2 text-sm font-semibold text-orange-100 transition hover:bg-orange-500/20"
+                onClick={() => onClearDisplacement(value.id)}
+              >
+                Clear Displacement
+              </button>
+            </>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

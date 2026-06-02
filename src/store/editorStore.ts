@@ -95,6 +95,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         (axis) => axis.startPointId !== id && axis.endPointId !== id
       ),
       selectedId: state.selectedId === id ? null : state.selectedId,
+      transformedImageUrl: null,
+      showCompare: false,
     })),
 
   addAxis: (axis) =>
@@ -112,6 +114,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     set((state) => ({
       axes: state.axes.filter((axis) => axis.id !== id),
       selectedId: state.selectedId === id ? null : state.selectedId,
+      transformedImageUrl: null,
+      showCompare: false,
     })),
 
   addRegion: (region) =>
@@ -131,6 +135,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     set((state) => ({
       regions: state.regions.filter((region) => region.id !== id),
       selectedId: state.selectedId === id ? null : state.selectedId,
+      transformedImageUrl: null,
+      showCompare: false,
     })),
 
   addLockedRegion: (region) =>
@@ -150,6 +156,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     set((state) => ({
       lockedRegions: state.lockedRegions.filter((region) => region.id !== id),
       selectedId: state.selectedId === id ? null : state.selectedId,
+      transformedImageUrl: null,
+      showCompare: false,
     })),
 
   setSelectedId: (id) => set({ selectedId: id }),

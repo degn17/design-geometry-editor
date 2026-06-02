@@ -20,6 +20,16 @@ export interface DesignPoint {
     | "rearEnd"
     | "roofTop"
     | "custom";
+  displacement?: PointDisplacement;
+}
+
+export interface PointDisplacement {
+  dx: number;
+  dy: number;
+  targetX: number;
+  targetY: number;
+  influenceRadius: number;
+  enabled: boolean;
 }
 
 export interface DesignAxis {
