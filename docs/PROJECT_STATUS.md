@@ -9,7 +9,7 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
 当前项目根目录为：
 
 ```text
-/Users/lw/Documents/designGeometryEditor
+/Users/lw/Projects/designGeometryEditor
 ```
 
 ## 2. 当前已实现功能
@@ -36,7 +36,11 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
   - 点移动后关联轴线长度会重新计算
   - 按住 Command / Ctrl 拖动 Point 时，不移动原始点，而是生成位移向量 displacement
   - Point displacement 会记录 `dx`、`dy`、`targetX`、`targetY`、`influenceRadius`、`enabled`
-  - 画布会可视化位移向量、目标点和 influence radius
+  - 画布会可视化位移向量、ghost target 和 influence radius
+  - displacement target 是原始 Point 的 ghost target，不是独立 Point
+  - 选中带 displacement 的 Point 时，可通过 `Clear Displacement` 清除位移向量
+  - 选中带 displacement 的 Point 后按 Delete / Backspace 会优先清除 displacement，再次按下才删除 Point
+  - Command / Ctrl 拖动生成 displacement 时，原始 Point 坐标保持不变，只更新 ghost target 和 `dx` / `dy`
 - 轴线创建：
   - Axis 工具点击两个已有点创建轴线
   - 自动计算 `currentLength`
@@ -75,6 +79,13 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
   - `applyBasicStretch` 会对选中的影响区域做水平或垂直基础缩放
   - 锁定区域会从原图重新贴回原位置
   - 生成 `transformedImageUrl`
+- Point vector warp：
+  - Command / Ctrl 拖动 Point 可以生成位移向量
+  - 选中带 displacement 的 Point 后可点击 `Apply Vector Warp`
+  - `applyVectorWarp` 会基于 Point 的 `dx`、`dy` 和 `influenceRadius` 驱动图像局部变形
+  - 当前算法是基础 radial displacement warp，使用 inverse mapping 和双线性采样
+  - 该功能不需要额外创建 Region
+  - 没有 active displacement point 时，`Apply Vector Warp` 会禁用并提示 `No active displacement point.`
 - 对比：
   - 支持 Original / Transformed 切换
   - 生成变形图后支持 Before / After slider 对比，原图在底层、变形图按滑杆比例裁切显示
@@ -88,7 +99,6 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
 - AI 修复 / inpainting。
 - 自动识别汽车部件，例如车轮、灯、车身边界。
 - 精确 mesh warp / TPS / cage deformation。
-- Point displacement / vector control 尚未驱动真实图像变形。
 - 真实 3D 透视或汽车结构理解。
 - 八方向区域 resize handles。
 - 区域旋转和复杂约束编辑。
@@ -172,6 +182,7 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
 - `src/store/editorStore.ts`：Zustand store，集中管理编辑器状态和 actions。
 - `src/types/editor.ts`：核心 TypeScript 数据结构。
 - `src/utils/imageTransform.ts`：图片加载和基础区域拉伸算法。
+- `src/utils/imageTransform.ts`：图片加载、基础区域拉伸算法和基础 Point vector warp 算法。
 - `src/utils/geometry.ts`：距离计算、矩形归一化、边界裁剪。
 - `src/utils/exportCanvas.ts`：图片导出下载。
 - `src/utils/ids.ts`：简单 ID 生成。
@@ -188,6 +199,7 @@ Design Geometry Editor 当前是一个本地浏览器运行的 MVP v0.1 原型�
 - `TransformOperation`：一次变形操作的参数记录，包含轴线、影响区域、锁定区域、变化百分比和创建时间。
 - `EditorState`：编辑器总状态，包含图片、工具、选中对象、点、轴线、区域、锁定区域、操作记录、变形图和对比状态。
 - `BasicStretchInput` / `BasicStretchResult`：基础图像拉伸算法的输入和输出类型。
+- `VectorWarpPoint` / `VectorWarpInput` / `VectorWarpResult`：基础 Point vector warp 算法的输入和输出类型。
 
 ## 6. 当前技术栈和主要依赖
 
@@ -254,7 +266,10 @@ npm run build
 - 基础拉伸算法只对矩形区域做简单缩放，不是高质量图像编辑算法。
 - 锁定区域只是原图裁切后贴回，边缘可能不自然。
 - 当前变形仍可能产生拉伸断裂、重叠、空白或细节破坏。
-- Point displacement 当前只是交互和数据原型，尚未用于驱动 `applyBasicStretch` 或其他图像变形算法。
+- Point vector warp 当前只是基础径向位移算法，不是专业 mesh warp、TPS 或 cage deformation。
+- Vector warp 变形质量较粗糙，多控制点叠加可能产生局部扭曲或不自然拉伸。
+- Vector warp 当前没有边缘修复、feather mask、AI repair，也不会理解汽车结构语义。
+- Locked region 当前只参与 Region-based stretch，尚未影响 vector warp。
 - 基础算法只区分 horizontal / vertical；`free` 方向当前未在 UI 中开放。
 - 右侧面板中 Axis 的 influence region 选择默认使用第一个 region，复杂场景下还需要更明确的引导。
 - `Transform` 工具按钮目前主要作为工具状态存在，实际变形入口在选中 Axis 后的右侧面板。
@@ -290,7 +305,10 @@ npm run build
 ### P1
 
 - 拆分 `CanvasStage.tsx` 和 `RightPanel.tsx`，降低组件复杂度。
-- 使用 displacement vector + influenceRadius 驱动局部图像变形。
+- 允许在 RightPanel 中编辑 `influenceRadius`。
+- 优化多控制点权重归一化，减少叠加扭曲。
+- 让 locked region 对 vector warp 产生约束影响。
+- 加入 feather / mask，降低局部变形边界痕迹。
 - 增加 undo / redo。
 - 增加本地 JSON 保存/加载编辑状态。
 - 增加基础测试，优先覆盖 geometry、imageTransform、store actions。
@@ -298,6 +316,7 @@ npm run build
 
 ### P2
 
+- 研究 TPS / mesh warp，替代当前基础 radial displacement warp。
 - 实现 mesh warp / thin plate spline / cage deformation 等更真实的形变算法。
 - 增加 AI repair / inpainting 接口。
 - 增加自动检测车轮或关键轮廓点。
@@ -305,6 +324,23 @@ npm run build
 - 增加更专业的设计工具交互，例如快捷键、对象列表、图层面板。
 
 ## 11. 本轮创建或修改过的文件列表
+
+本轮 P2 Vector Warp 修改：
+
+- `.gitignore`
+- `src/types/editor.ts`
+- `src/store/editorStore.ts`
+- `src/components/RightPanel.tsx`
+- `src/utils/imageTransform.ts`
+- `docs/MANUAL_TEST_RESULT_006.md`
+- `docs/PROJECT_STATUS.md`
+
+本轮 P2 Vector Control Fix 修改：
+
+- `src/components/canvas/PointsLayer.tsx`
+- `src/components/RightPanel.tsx`
+- `docs/MANUAL_TEST_RESULT_007.md`
+- `docs/PROJECT_STATUS.md`
 
 本轮 P1 Vector Control Prototype 修改：
 
@@ -343,6 +379,8 @@ npm run build
 - `docs/MANUAL_TEST_RESULT_003.md`
 - `docs/MANUAL_TEST_RESULT_004.md`
 - `docs/MANUAL_TEST_RESULT_005.md`
+- `docs/MANUAL_TEST_RESULT_006.md`
+- `docs/MANUAL_TEST_RESULT_007.md`
 
 本轮 P1 Drag Upload 修改：
 

@@ -109,3 +109,22 @@ export interface BasicStretchResult {
   width: number;
   height: number;
 }
+
+export interface VectorWarpPoint {
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  influenceRadius: number;
+}
+
+export interface VectorWarpInput {
+  image: HTMLImageElement;
+  points: VectorWarpPoint[];
+}
+
+export interface VectorWarpResult {
+  dataUrl: string;
+  width: number;
+  height: number;
+}

@@ -22,6 +22,7 @@ function RightPanel() {
     deleteRegion,
     deleteLockedRegion,
     applyTransform,
+    applyVectorWarpTransform,
   } = useEditorStore((state) => ({
     imageUrl: state.imageUrl,
     imageWidth: state.imageWidth,
@@ -40,10 +41,12 @@ function RightPanel() {
     deleteRegion: state.deleteRegion,
     deleteLockedRegion: state.deleteLockedRegion,
     applyTransform: state.applyTransform,
+    applyVectorWarpTransform: state.applyVectorWarpTransform,
   }));
   const [selectedRegionId, setSelectedRegionId] = useState<string>("");
   const [selectedLockedIds, setSelectedLockedIds] = useState<string[]>([]);
   const [isApplying, setIsApplying] = useState(false);
+  const [isApplyingVectorWarp, setIsApplyingVectorWarp] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const selectedObject = useMemo(
     () => findSelectedObject(selectedId, points, axes, regions, lockedRegions),
@@ -63,6 +66,12 @@ function RightPanel() {
       }
 
       event.preventDefault();
+      if (selectedObject.kind === "point" && hasActiveDisplacement(selectedObject.value)) {
+        updatePoint(selectedObject.value.id, { displacement: undefined });
+        setMessage("Displacement cleared.");
+        return;
+      }
+
       deleteSelectedObject(selectedObject, {
         deletePoint,
         deleteAxis,
@@ -74,7 +83,7 @@ function RightPanel() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [deleteAxis, deleteLockedRegion, deletePoint, deleteRegion, selectedObject]);
+  }, [deleteAxis, deleteLockedRegion, deletePoint, deleteRegion, selectedObject, updatePoint]);
 
   const validationMessage =
     selectedObject?.kind === "axis"
@@ -84,6 +93,13 @@ function RightPanel() {
           hasRegions: regions.length > 0,
           selectedRegionId,
           changePercent: selectedObject.value.changePercent ?? 0,
+        })
+      : null;
+  const vectorWarpValidationMessage =
+    selectedObject?.kind === "point"
+      ? getVectorWarpValidationMessage({
+          hasImage: Boolean(imageUrl),
+          hasActiveVectorPoint: hasActiveVectorWarpPoint(points),
         })
       : null;
 
@@ -160,7 +176,37 @@ function RightPanel() {
         ) : selectedObject ? (
           <ObjectInspector
             selectedObject={selectedObject}
-            onClearDisplacement={(id) => updatePoint(id, { displacement: undefined })}
+            isApplyingVectorWarp={isApplyingVectorWarp}
+            canApplyVectorWarp={!vectorWarpValidationMessage}
+            vectorWarpValidationMessage={vectorWarpValidationMessage}
+            onClearDisplacement={(id) => {
+              updatePoint(id, { displacement: undefined });
+              setMessage("Displacement cleared.");
+            }}
+            onApplyVectorWarp={async () => {
+              const nextValidationMessage = getVectorWarpValidationMessage({
+                hasImage: Boolean(imageUrl),
+                hasActiveVectorPoint: hasActiveVectorWarpPoint(points),
+              });
+
+              if (nextValidationMessage) {
+                setMessage(nextValidationMessage);
+                return;
+              }
+
+              setIsApplyingVectorWarp(true);
+              setMessage(null);
+              try {
+                await applyVectorWarpTransform();
+                setMessage("Vector warp applied.");
+              } catch (error) {
+                setMessage(
+                  error instanceof Error ? error.message : "Unable to apply vector warp."
+                );
+              } finally {
+                setIsApplyingVectorWarp(false);
+              }
+            }}
           />
         ) : (
           <p className="text-sm text-neutral-500">
@@ -372,13 +418,21 @@ function AxisInspector({
 
 function ObjectInspector({
   selectedObject,
+  isApplyingVectorWarp,
+  canApplyVectorWarp,
+  vectorWarpValidationMessage,
   onClearDisplacement,
+  onApplyVectorWarp,
 }: {
   selectedObject:
     | { kind: "point"; value: DesignPoint }
     | { kind: "region"; value: DesignRegion }
     | { kind: "lock"; value: LockedRegion };
+  isApplyingVectorWarp: boolean;
+  canApplyVectorWarp: boolean;
+  vectorWarpValidationMessage: string | null;
   onClearDisplacement(id: string): void;
+  onApplyVectorWarp(): Promise<void>;
 }) {
   const value = selectedObject.value;
   const displacement =
@@ -427,6 +481,23 @@ function ObjectInspector({
                 Clear Displacement
               </button>
             </>
+          ) : (
+            <p className="text-xs text-amber-300">
+              No active displacement point.
+            </p>
+          )}
+          <button
+            type="button"
+            className="w-full rounded-md border border-emerald-400 bg-emerald-500/15 px-3 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!canApplyVectorWarp || isApplyingVectorWarp}
+            onClick={() => {
+              void onApplyVectorWarp();
+            }}
+          >
+            {isApplyingVectorWarp ? "Applying..." : "Apply Vector Warp"}
+          </button>
+          {vectorWarpValidationMessage ? (
+            <p className="text-xs text-amber-300">{vectorWarpValidationMessage}</p>
           ) : null}
         </>
       ) : null}
@@ -652,6 +723,40 @@ function getTransformValidationMessage({
 
   if (!Number.isFinite(changePercent)) {
     return "Enter a valid change percent before applying a transform.";
+  }
+
+  return null;
+}
+
+function hasActiveVectorWarpPoint(points: DesignPoint[]) {
+  return points.some(hasActiveDisplacement);
+}
+
+function hasActiveDisplacement(point: DesignPoint) {
+  const displacement = point.displacement;
+  if (!displacement?.enabled) {
+    return false;
+  }
+
+  return (
+    displacement.influenceRadius > 0 &&
+    (displacement.dx !== 0 || displacement.dy !== 0)
+  );
+}
+
+function getVectorWarpValidationMessage({
+  hasImage,
+  hasActiveVectorPoint,
+}: {
+  hasImage: boolean;
+  hasActiveVectorPoint: boolean;
+}) {
+  if (!hasImage) {
+    return "Upload an image before applying vector warp.";
+  }
+
+  if (!hasActiveVectorPoint) {
+    return "No active displacement point.";
   }
 
   return null;

@@ -7,9 +7,10 @@ import type {
   EditorTool,
   LockedRegion,
   TransformOperation,
+  VectorWarpPoint,
 } from "../types/editor";
 import { getDistance } from "../utils/geometry";
-import { applyBasicStretch, loadImage } from "../utils/imageTransform";
+import { applyBasicStretch, applyVectorWarp, loadImage } from "../utils/imageTransform";
 
 interface EditorActions {
   setImage(imageUrl: string, width: number, height: number): void;
@@ -28,6 +29,7 @@ interface EditorActions {
   deleteLockedRegion(id: string): void;
   setSelectedId(id: string | null): void;
   applyTransform(operation: TransformOperation): Promise<void>;
+  applyVectorWarpTransform(): Promise<void>;
   setTransformedImageUrl(url: string | null): void;
   setShowCompare(showCompare: boolean): void;
   resetEditor(): void;
@@ -79,7 +81,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   updatePoint: (id, patch) =>
     set((state) => {
       const points = state.points.map((point) =>
-        point.id === id ? { ...point, ...patch } : point
+        point.id === id ? applyPointPatch(point, patch) : point
       );
 
       return {
@@ -195,12 +197,85 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     }));
   },
 
+  applyVectorWarpTransform: async () => {
+    const state = get();
+    const imageUrl = state.imageUrl;
+    const vectorPoints = getActiveVectorWarpPoints(state.points);
+
+    if (!imageUrl || vectorPoints.length === 0) {
+      return;
+    }
+
+    const image = await loadImage(imageUrl);
+    const result = await applyVectorWarp({
+      image,
+      points: vectorPoints,
+    });
+
+    set({
+      transformedImageUrl: result.dataUrl,
+      showCompare: true,
+      activeTool: "compare",
+    });
+  },
+
   setTransformedImageUrl: (url) => set({ transformedImageUrl: url }),
 
   setShowCompare: (showCompare) => set({ showCompare }),
 
   resetEditor: () => set(initialState),
 }));
+
+function applyPointPatch(point: DesignPoint, patch: Partial<DesignPoint>): DesignPoint {
+  const nextPoint = { ...point, ...patch };
+  const hasDisplacementPatch = Object.prototype.hasOwnProperty.call(patch, "displacement");
+  const displacement = point.displacement;
+
+  if (hasDisplacementPatch || !displacement?.enabled) {
+    return nextPoint;
+  }
+
+  const nextX = typeof patch.x === "number" ? patch.x : point.x;
+  const nextY = typeof patch.y === "number" ? patch.y : point.y;
+  const deltaX = nextX - point.x;
+  const deltaY = nextY - point.y;
+
+  if (deltaX === 0 && deltaY === 0) {
+    return nextPoint;
+  }
+
+  return {
+    ...nextPoint,
+    displacement: {
+      ...displacement,
+      targetX: displacement.targetX + deltaX,
+      targetY: displacement.targetY + deltaY,
+    },
+  };
+}
+
+function getActiveVectorWarpPoints(points: DesignPoint[]): VectorWarpPoint[] {
+  return points.flatMap((point) => {
+    const displacement = point.displacement;
+    if (
+      !displacement?.enabled ||
+      displacement.influenceRadius <= 0 ||
+      (displacement.dx === 0 && displacement.dy === 0)
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        x: point.x,
+        y: point.y,
+        dx: displacement.dx,
+        dy: displacement.dy,
+        influenceRadius: displacement.influenceRadius,
+      },
+    ];
+  });
+}
 
 function recalculateAxisLengths(
   axes: DesignAxis[],

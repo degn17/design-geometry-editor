@@ -1,5 +1,5 @@
 import type { KonvaEventObject } from "konva/lib/Node";
-import { Fragment } from "react";
+import { Fragment, useRef } from "react";
 import { Arrow, Circle, Group, Text } from "react-konva";
 import type { DesignPoint, PointDisplacement } from "../../types/editor";
 
@@ -20,6 +20,8 @@ function PointsLayer({
   onDisplacement,
   onPointClick,
 }: PointsLayerProps) {
+  const vectorDragPointIdsRef = useRef(new Set<string>());
+
   return (
     <>
       {points.map((point) => {
@@ -27,7 +29,16 @@ function PointsLayer({
         const displacement = point.displacement?.enabled ? point.displacement : null;
         return (
           <Fragment key={point.id}>
-            {displacement ? <PointDisplacementView point={point} displacement={displacement} /> : null}
+            {displacement ? (
+              <PointDisplacementView
+                point={point}
+                displacement={displacement}
+                onSelect={() => onSelect(point.id)}
+                onTargetMove={(targetX, targetY) =>
+                  onDisplacement(point.id, createDisplacement(point, targetX, targetY))
+                }
+              />
+            ) : null}
             <Group
               x={point.x}
               y={point.y}
@@ -35,21 +46,31 @@ function PointsLayer({
               onMouseDown={(event) => {
                 event.cancelBubble = true;
               }}
-              onDragStart={() => onSelect(point.id)}
-              onDragMove={(event) => {
+              onDragStart={(event) => {
+                onSelect(point.id);
                 if (isVectorDrag(event)) {
-                  const targetX = event.target.x();
-                  const targetY = event.target.y();
-                  onDisplacement(point.id, createDisplacement(point, targetX, targetY));
-                  event.target.position({ x: point.x, y: point.y });
+                  vectorDragPointIdsRef.current.add(point.id);
+                  resetDraggedPointPosition(event, point);
+                }
+              }}
+              onDragMove={(event) => {
+                if (isVectorDrag(event) || vectorDragPointIdsRef.current.has(point.id)) {
+                  vectorDragPointIdsRef.current.add(point.id);
+                  const target = getLocalPointerPosition(event) ?? {
+                    x: event.target.x(),
+                    y: event.target.y(),
+                  };
+                  onDisplacement(point.id, createDisplacement(point, target.x, target.y));
+                  resetDraggedPointPosition(event, point);
                   return;
                 }
 
                 onMove(point.id, event.target.x(), event.target.y());
               }}
               onDragEnd={(event) => {
-                if (isVectorDrag(event)) {
-                  event.target.position({ x: point.x, y: point.y });
+                if (isVectorDrag(event) || vectorDragPointIdsRef.current.has(point.id)) {
+                  resetDraggedPointPosition(event, point);
+                  vectorDragPointIdsRef.current.delete(point.id);
                   return;
                 }
 
@@ -84,9 +105,13 @@ function PointsLayer({
 function PointDisplacementView({
   point,
   displacement,
+  onSelect,
+  onTargetMove,
 }: {
   point: DesignPoint;
   displacement: PointDisplacement;
+  onSelect(): void;
+  onTargetMove(targetX: number, targetY: number): void;
 }) {
   return (
     <>
@@ -109,15 +134,44 @@ function PointDisplacementView({
         pointerWidth={10}
         listening={false}
       />
-      <Circle
+      <Group
         x={displacement.targetX}
         y={displacement.targetY}
-        radius={6}
-        fill="rgba(15, 23, 42, 0.65)"
-        stroke="#fed7aa"
-        strokeWidth={2}
-        listening={false}
-      />
+        draggable
+        onMouseDown={(event) => {
+          event.cancelBubble = true;
+          onSelect();
+        }}
+        onDragStart={(event) => {
+          event.cancelBubble = true;
+          onSelect();
+        }}
+        onDragMove={(event) => {
+          event.cancelBubble = true;
+          onTargetMove(event.target.x(), event.target.y());
+        }}
+        onDragEnd={(event) => {
+          event.cancelBubble = true;
+          onTargetMove(event.target.x(), event.target.y());
+        }}
+      >
+        <Circle
+          radius={7}
+          fill="rgba(15, 23, 42, 0.25)"
+          stroke="#fed7aa"
+          strokeWidth={2}
+          dash={[4, 4]}
+        />
+        <Text
+          x={10}
+          y={8}
+          text="Vector Target"
+          fontSize={12}
+          fill="#fed7aa"
+          opacity={0.85}
+          listening={false}
+        />
+      </Group>
       <Text
         x={(point.x + displacement.targetX) / 2 + 8}
         y={(point.y + displacement.targetY) / 2 - 18}
@@ -147,6 +201,22 @@ function createDisplacement(
 
 function isVectorDrag(event: KonvaEventObject<DragEvent>) {
   return event.evt.metaKey || event.evt.ctrlKey;
+}
+
+function getLocalPointerPosition(event: KonvaEventObject<DragEvent>) {
+  const stage = event.target.getStage();
+  const parent = event.target.getParent();
+  const pointer = stage?.getPointerPosition();
+
+  if (!parent || !pointer) {
+    return null;
+  }
+
+  return parent.getAbsoluteTransform().copy().invert().point(pointer);
+}
+
+function resetDraggedPointPosition(event: KonvaEventObject<DragEvent>, point: DesignPoint) {
+  event.target.position({ x: point.x, y: point.y });
 }
 
 function handlePointClick(
